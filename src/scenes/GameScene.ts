@@ -25,9 +25,11 @@ export class GameScene extends Phaser.Scene {
     private startBtn!: Phaser.GameObjects.Text;
     private spawnTimer: number = 0;
     
-    private waveTotal: number = WAVE.firstTotalViruses;
+    private currentWaveIndex: number = 0;
+    private waveTotal: number = WAVE.definitions[0].totalViruses;
     private waveSpawned: number = 0;
     private waveKilled: number = 0;
+    private waveTransitioning: boolean = false;
     private waveText!: Phaser.GameObjects.Text;
     private waveProgressBar!: Phaser.GameObjects.Rectangle;
     private statusText!: Phaser.GameObjects.Text;
@@ -124,13 +126,8 @@ export class GameScene extends Phaser.Scene {
         const previewVisual3 = this.add.rectangle(node1CenterX + 660, node1CenterY + 50, 60, 60, 0xff0000);
 
         this.startBtn.on('pointerup', () => {
-            this.waveActive = true;
-            this.spawnTimer = -WAVE.initialSpawnDelayMs;
+            this.startWave();
             this.startBtn.setVisible(false);
-            this.statusText.setText("Incoming viruses. Defenses activated.");
-            this.time.delayedCall(2600, () => {
-                if (this.waveActive) this.statusText.setText('Neutralize every threat before it uploads to the core.');
-            });
             
             // Remove the previews, the battle has begun
             previewText.destroy();
@@ -177,7 +174,6 @@ export class GameScene extends Phaser.Scene {
         
         // Listen for killed viruses
         this.events.on('virusKilled', (virus?: Virus) => {
-            // Reusing this event for factories generating money as well (if virus is undefined)
             this.energy += 25;
             this.energyText.setText(`ENERGY: ${this.energy}`);
             
@@ -189,14 +185,33 @@ export class GameScene extends Phaser.Scene {
                 this.waveProgressBar.width = progressWidth;
 
                 if (this.waveKilled >= this.waveTotal) {
-                    this.add.text(width/2, height/2, 'WAVE CLEARED', { fontSize: '48px', color: '#00ff00', backgroundColor: '#000000' }).setOrigin(0.5).setScrollFactor(0);
+                    this.completeWave();
                 }
             }
         });
+
+        this.events.on('energyGenerated', (amount: number, x: number, y: number) => {
+            this.energy += amount;
+            this.energyText.setText(`ENERGY: ${this.energy}`);
+
+            const floatingText = this.add.text(x, y - 38, `+${amount}`, {
+                fontSize: '18px',
+                fontFamily: 'monospace',
+                color: '#ffff66',
+                backgroundColor: '#000000'
+            }).setOrigin(0.5);
+            this.tweens.add({
+                targets: floatingText,
+                y: y - 68,
+                alpha: 0,
+                duration: 900,
+                onComplete: () => floatingText.destroy()
+            });
+        });
         
         // Listen for projectiles
-        this.events.on('spawnProjectile', (x: number, y: number, area: number, lane: number) => {
-            this.projectiles.push(new Projectile(this, x, y, area, lane));
+        this.events.on('spawnProjectile', (x: number, y: number, area: number, lane: number, target?: Virus) => {
+            this.projectiles.push(new Projectile(this, x, y, area, lane, target));
         });
 
         // Setup Tower UI selection
@@ -321,6 +336,65 @@ export class GameScene extends Phaser.Scene {
         }
     }
 
+    private startWave() {
+        const wave = WAVE.definitions[this.currentWaveIndex];
+        this.waveTotal = wave.totalViruses;
+        this.waveSpawned = 0;
+        this.waveKilled = 0;
+        this.spawnTimer = -WAVE.initialSpawnDelayMs;
+        this.waveProgressBar.width = 0;
+        this.waveActive = true;
+        this.waveTransitioning = false;
+
+        if (this.currentWaveIndex === 0) {
+            this.statusText.setText("Incoming viruses. Defenses activated.");
+        } else {
+            this.statusText.setText("Uhh ohh, there's more.");
+        }
+
+        this.waveText.setText(`WAVE ${this.currentWaveIndex + 1}/${WAVE.definitions.length}`);
+        this.time.delayedCall(2200, () => {
+            if (this.waveActive) this.statusText.setText('Neutralize every threat before it uploads to the core.');
+        });
+
+        if (this.currentWaveIndex >= 1) {
+            this.cameras.main.zoomTo(0.86, 900, 'Power2');
+            this.statusText.setScale(0.95);
+        }
+    }
+
+    private completeWave() {
+        if (this.waveTransitioning) return;
+        this.waveTransitioning = true;
+        this.waveActive = false;
+
+        const clearText = this.add.text(this.scale.width / 2, this.scale.height / 2, `WAVE ${this.currentWaveIndex + 1} CLEARED`, {
+            fontSize: '48px',
+            color: '#00ff00',
+            backgroundColor: '#000000',
+            fontFamily: 'monospace'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
+
+        this.time.delayedCall(WAVE.betweenWaveDelayMs, () => {
+            clearText.destroy();
+            this.currentWaveIndex++;
+
+            if (this.currentWaveIndex >= WAVE.definitions.length) {
+                this.statusText.setText('All threats neutralized. Core secure.');
+                this.add.text(this.scale.width / 2, this.scale.height / 2, 'SYSTEM SECURED', {
+                    fontSize: '52px',
+                    color: '#00ffff',
+                    backgroundColor: '#000000',
+                    fontFamily: 'monospace',
+                    fontStyle: 'bold'
+                }).setOrigin(0.5).setScrollFactor(0).setDepth(30);
+                return;
+            }
+
+            this.startWave();
+        });
+    }
+
     // Main Game Loop - Runs constantly even if camera is on another node
     update(time: number, delta: number) {
         // Cooldown processing
@@ -365,8 +439,9 @@ export class GameScene extends Phaser.Scene {
                 // Y calculation: Top of grid is roughly center - (3 * 96) + (96/2)
                 const node1TopY = node1CenterY - 288 + 48;
                 const spawnY = node1TopY + (lane * 96);
+                const wave = WAVE.definitions[this.currentWaveIndex];
 
-                const newVirus = new Virus(this, node1CenterX + 480, spawnY, lane);
+                const newVirus = new Virus(this, node1CenterX + 480, spawnY, lane, wave.hpMultiplier, wave.speedMultiplier);
                 this.viruses.push(newVirus);
             }
         }
@@ -396,8 +471,8 @@ export class GameScene extends Phaser.Scene {
 
             // Projectile Collisions
             this.projectiles.forEach(p => {
-                if (p.active && p.currentArea === virus.currentArea && p.lane === virus.lane) {
-                    if (Math.abs(p.x - virus.x) < 30) { // Simple overlap check
+                if (p.active && p.currentArea === virus.currentArea) {
+                    if (Phaser.Math.Distance.Between(p.x, p.y, virus.x, virus.y) < 30) {
                         virus.takeDamage(p.damage);
                         const pulse = this.add.circle(virus.x, virus.y, 12, 0x99ffff, 0.55).setDepth(7);
                         this.tweens.add({

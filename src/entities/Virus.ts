@@ -21,11 +21,14 @@ export class Virus extends Phaser.GameObjects.Rectangle {
     private healthBack: Phaser.GameObjects.Rectangle;
     private healthFill: Phaser.GameObjects.Rectangle;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, lane: number) {
+    constructor(scene: Phaser.Scene, x: number, y: number, lane: number, hpMultiplier: number = 1, speedMultiplier: number = 1) {
         super(scene, x, y, 60, 60, 0xff0000);
         scene.add.existing(this);
         
         this.lane = lane;
+        this.maxHp = Math.round(VIRUS.maxHp * hpMultiplier);
+        this.hp = this.maxHp;
+        this.speed = VIRUS.speed * speedMultiplier;
         this.baseX = x;
         this.baseY = y;
 
