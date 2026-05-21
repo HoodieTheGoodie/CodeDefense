@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeDefense</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #00ff00;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: monospace;
+        }
+        #game-container {
+            box-shadow: 0 0 20px rgba(0, 255, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- On-screen error logging for dev environment without DevTools -->
+    <div id="error-log" style="position: absolute; top:0; left:0; color: #ff5555; background: rgba(0,0,0,0.8); padding: 10px; z-index: 9999; font-family: monospace; white-space: pre-wrap; pointer-events: none;"></div>
+    <script>
+        window.onerror = function(msg, url, line, col, error) {
+            document.getElementById('error-log').innerText += msg + '\n' + (error ? error.stack : '') + '\n\n';
+            return false;
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+            document.getElementById('error-log').innerText += 'Promise Rejection: ' + event.reason + '\n\n';
+        });
+    </script>
+    <div id="game-container"></div>
+    <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
