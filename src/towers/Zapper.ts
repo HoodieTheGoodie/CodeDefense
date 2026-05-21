@@ -1,9 +1,10 @@
 import Phaser from 'phaser';
 import { BaseTower } from './BaseTower';
+import { TOWER } from '../config/GameBalance';
 
 export class Zapper extends BaseTower {
     private fireTimer: number = 0;
-    private fireRate: number = 1000; // Fires 1 shot per second
+    private fireRate: number = TOWER.zapperFireRateMs;
 
     constructor(scene: Phaser.Scene, x: number, y: number, currentArea: number, gridX: number, gridY: number) {
         super(scene, x, y, 0x0000ff, 150, currentArea, gridX, gridY);

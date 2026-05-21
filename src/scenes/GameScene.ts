@@ -4,6 +4,7 @@ import { BaseTower } from '../towers/BaseTower';
 import { Zapper } from '../towers/Zapper';
 import { PowerFactory } from '../towers/PowerFactory';
 import { Projectile } from '../entities/Projectile';
+import { TOWER, WAVE } from '../config/GameBalance';
 
 export class GameScene extends Phaser.Scene {
     private currentArea: number = 0; // 0 = Core, 1 = Node 1
@@ -24,11 +25,15 @@ export class GameScene extends Phaser.Scene {
     private startBtn!: Phaser.GameObjects.Text;
     private spawnTimer: number = 0;
     
-    private waveTotal: number = 20; // 20 enemies in first wave
+    private waveTotal: number = WAVE.firstTotalViruses;
     private waveSpawned: number = 0;
     private waveKilled: number = 0;
     private waveText!: Phaser.GameObjects.Text;
     private waveProgressBar!: Phaser.GameObjects.Rectangle;
+    private statusText!: Phaser.GameObjects.Text;
+    private uploadBack!: Phaser.GameObjects.Rectangle;
+    private uploadFill!: Phaser.GameObjects.Rectangle;
+    private uploadText!: Phaser.GameObjects.Text;
 
     private selectedTowerType: string | null = null;
     
@@ -120,7 +125,12 @@ export class GameScene extends Phaser.Scene {
 
         this.startBtn.on('pointerup', () => {
             this.waveActive = true;
+            this.spawnTimer = -WAVE.initialSpawnDelayMs;
             this.startBtn.setVisible(false);
+            this.statusText.setText("Incoming viruses. Defenses activated.");
+            this.time.delayedCall(2600, () => {
+                if (this.waveActive) this.statusText.setText('Neutralize every threat before it uploads to the core.');
+            });
             
             // Remove the previews, the battle has begun
             previewText.destroy();
@@ -154,6 +164,16 @@ export class GameScene extends Phaser.Scene {
         
         this.add.rectangle(width - 130, 55, 200, 15, 0x333333).setOrigin(0.5).setScrollFactor(0);
         this.waveProgressBar = this.add.rectangle(width - 230, 55, 0, 15, 0x00ff00).setOrigin(0, 0.5).setScrollFactor(0);
+
+        this.statusText = this.add.text(width / 2, 96, 'Place defenses, then enter Node 1 to start the first wave.', {
+            fontSize: '18px', fontFamily: 'monospace', color: '#00ffff', backgroundColor: '#000000', padding: { x: 10, y: 6 }
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(20);
+
+        this.uploadBack = this.add.rectangle(width / 2, 126, 340, 12, 0x331111).setOrigin(0.5).setScrollFactor(0).setVisible(false);
+        this.uploadFill = this.add.rectangle(width / 2 - 170, 126, 0, 12, 0xff2222).setOrigin(0, 0.5).setScrollFactor(0).setVisible(false);
+        this.uploadText = this.add.text(width / 2, 148, '', {
+            fontSize: '14px', fontFamily: 'monospace', color: '#ff7777', backgroundColor: '#000000'
+        }).setOrigin(0.5).setScrollFactor(0).setVisible(false);
         
         // Listen for killed viruses
         this.events.on('virusKilled', (virus?: Virus) => {
@@ -228,7 +248,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.selectedTowerType) return;
         
         let area = this.currentArea;
-        let cost = this.selectedTowerType === 'zapper' ? 100 : 50;
+        let cost = this.selectedTowerType === 'zapper' ? TOWER.zapperCost : TOWER.powerCost;
 
         // Check cooldown
         if (this.selectedTowerType === 'zapper' && this.zapperCooldownTime > 0) return;
@@ -268,11 +288,11 @@ export class GameScene extends Phaser.Scene {
         let newTower;
         if (this.selectedTowerType === 'zapper') {
             newTower = new Zapper(this, snappedX, snappedY, area, snappedX, gridY); // Passing gridY for lane shooting
-            this.zapperCooldownTime = 5000; // 5 seconds cooldown
+            this.zapperCooldownTime = TOWER.zapperCooldownMs;
         } else {
             newTower = new PowerFactory(this, snappedX, snappedY, area, snappedX, gridY);
             // PVZ actually has a fairly short cooldown for sun producers, let's say 4 seconds
-            this.powerCooldownTime = 4000;
+            this.powerCooldownTime = TOWER.powerCooldownMs;
         }
         
         this.towers.push(newTower);
@@ -315,6 +335,13 @@ export class GameScene extends Phaser.Scene {
             if (this.powerCooldownTime <= 0) this.powerCooldownText.setText('');
         }
 
+        // Towers keep ticking before the wave starts, which lets economy defenses feel alive.
+        this.towers = this.towers.filter(t => {
+            if (!t.isAlive) return false;
+            t.tick(time, delta, this.viruses);
+            return true;
+        });
+
         if (!this.waveActive || this.coreHp <= 0) return;
 
         // Wave spawner logic
@@ -323,7 +350,7 @@ export class GameScene extends Phaser.Scene {
             
             // Spawn rate starts slow and gets faster
             const progress = this.waveSpawned / this.waveTotal;
-            const spawnRate = 8000 - (progress * 5000); // 8 seconds down to 3 seconds
+            const spawnRate = WAVE.spawnRateStartMs - (progress * (WAVE.spawnRateStartMs - WAVE.spawnRateEndMs));
 
             if (this.spawnTimer > spawnRate) {
                 this.spawnTimer = 0;
@@ -344,13 +371,6 @@ export class GameScene extends Phaser.Scene {
             }
         }
 
-        // Tick towers
-        this.towers = this.towers.filter(t => {
-            if (!t.isAlive) return false;
-            t.tick(time, delta, this.viruses);
-            return true;
-        });
-        
         // Tick projectiles
         this.projectiles = this.projectiles.filter(p => {
             if (!p.active) return false;
@@ -368,20 +388,30 @@ export class GameScene extends Phaser.Scene {
                 targetTower = this.towers.find(t => t.currentArea === 0 && Math.abs(t.x - virus.x) < 30 && Math.abs(t.y - virus.y) < 30);
             }
             
-            virus.tick(delta, targetTower);
+            const coreCenterX = this.scale.width / 2; // 512
+            const coreCenterY = (this.scale.height / 2) + 40;
+            const reachedCore = virus.currentArea === 0 && Phaser.Math.Distance.Between(virus.baseX, virus.baseY, coreCenterX, coreCenterY) < 32;
+
+            virus.tick(delta, targetTower, reachedCore);
 
             // Projectile Collisions
             this.projectiles.forEach(p => {
                 if (p.active && p.currentArea === virus.currentArea && p.lane === virus.lane) {
                     if (Math.abs(p.x - virus.x) < 30) { // Simple overlap check
                         virus.takeDamage(p.damage);
+                        const pulse = this.add.circle(virus.x, virus.y, 12, 0x99ffff, 0.55).setDepth(7);
+                        this.tweens.add({
+                            targets: pulse,
+                            scale: 2.2,
+                            alpha: 0,
+                            duration: 220,
+                            onComplete: () => pulse.destroy()
+                        });
                         p.destroy();
                     }
                 }
             });
 
-            const coreCenterX = this.scale.width / 2; // 512
-            
             // Handle cross-node transitions or reaching the core
             // If dragging across Node 1 and touches left bound
             if (virus.currentArea === 1 && virus.baseX < (1536 - 480)) {
@@ -397,23 +427,34 @@ export class GameScene extends Phaser.Scene {
                 virus.setDisplaySize(30, 30);
             }
             
-            // If entered Core grid and reaches actual core left point
-            if (virus.currentArea === 0 && virus.baseX < coreCenterX) {
-                // Damage core
-                this.coreHp -= 1;
+            if (reachedCore) {
+                this.uploadBack.setVisible(true);
+                this.uploadFill.setVisible(true);
+                this.uploadText.setVisible(true);
+                this.uploadFill.width = 340 * virus.uploadProgress;
+                this.uploadText.setText(`VIRUS UPLOADING: ${Math.floor(virus.uploadProgress * 100)}%`);
+                this.statusText.setText('A virus is uploading into the core. Stop it now.');
+            }
+            
+            // If the upload completes, the core is infected.
+            if (virus.uploadProgress >= 1) {
+                this.coreHp = 0;
                 this.coreHpText.setText(`HP: ${this.coreHp}`);
                 
-                // Remove without energy reward
                 this.viruses = this.viruses.filter(v => v !== virus);
                 virus.destroy();
                 
-                if (this.coreHp <= 0) {
-                    this.cameras.main.shake(500, 0.05);
-                    this.add.text(this.cameras.main.scrollX + (this.scale.width / 2), this.scale.height / 2, 'SYSTEM FAILURE', {
-                        fontSize: '64px', fontFamily: 'monospace', color: '#ff0000', backgroundColor: '#000000', fontStyle: 'bold'
-                    }).setOrigin(0.5);
-                }
+                this.cameras.main.shake(500, 0.05);
+                this.add.text(this.cameras.main.scrollX + (this.scale.width / 2), this.scale.height / 2, 'SYSTEM FAILURE', {
+                    fontSize: '64px', fontFamily: 'monospace', color: '#ff0000', backgroundColor: '#000000', fontStyle: 'bold'
+                }).setOrigin(0.5);
             }
         });
+
+        if (!this.viruses.some(virus => virus.isUploading()) && this.uploadBack.visible) {
+            this.uploadBack.setVisible(false);
+            this.uploadFill.setVisible(false);
+            this.uploadText.setVisible(false);
+        }
     }
 }
