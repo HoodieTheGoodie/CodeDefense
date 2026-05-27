@@ -26,10 +26,12 @@
     <!-- On-screen error logging for dev environment without DevTools -->
     <div id="error-log" style="position: absolute; top:0; left:0; color: #ff5555; background: rgba(0,0,0,0.8); padding: 10px; z-index: 9999; font-family: monospace; white-space: pre-wrap; pointer-events: none;"></div>
     <script>
-        window.onerror = function(msg, url, line, col, error) {
-            document.getElementById('error-log').innerText += msg + '\n' + (error ? error.stack : '') + '\n\n';
-            return false;
-        };
+        window.addEventListener('error', function(event) {
+            let msg = event.message || '';
+            if (event.error) msg += '\n' + event.error.stack;
+            if (event.target && event.target.src) msg += '\nFailed to load resource: ' + event.target.src;
+            document.getElementById('error-log').innerText += 'ERROR: ' + msg + '\n\n';
+        }, true);
         window.addEventListener('unhandledrejection', function(event) {
             document.getElementById('error-log').innerText += 'Promise Rejection: ' + event.reason + '\n\n';
         });

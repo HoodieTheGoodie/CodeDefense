@@ -1,10 +1,15 @@
 import Phaser from 'phaser';
 import { VIRUS } from '../config/GameBalance';
+import { EVENT_IDS, VIRUS_IDS } from '../config/GameIds';
 
 export class Virus extends Phaser.GameObjects.Rectangle {
+    private static NEXT_ID = 1;
+    public readonly uid: string;
+    public readonly virusId: string;
     public hp: number = VIRUS.maxHp;
     public maxHp: number = VIRUS.maxHp;
     public speed: number = VIRUS.speed; // pixels per second
+    private baseSpeed: number = VIRUS.speed;
     public currentArea: number = 1; // 1 = Node 1, 0 = Core
     public lane: number = 0; // 0 to 5 for Node 1
 
@@ -20,9 +25,12 @@ export class Virus extends Phaser.GameObjects.Rectangle {
     private attackDamage: number = 15;
     private healthBack: Phaser.GameObjects.Rectangle;
     private healthFill: Phaser.GameObjects.Rectangle;
+    private leaderFlag?: Phaser.GameObjects.Triangle;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, lane: number) {
-        super(scene, x, y, 60, 60, 0xff0000);
+    constructor(scene: Phaser.Scene, x: number, y: number, lane: number, virusId: string = VIRUS_IDS.standard) {
+        super(scene, x, y, 40, 40, 0xff0000);
+        this.uid = `virus_${Virus.NEXT_ID++}`;
+        this.virusId = virusId;
         scene.add.existing(this);
         
         this.lane = lane;
@@ -31,10 +39,25 @@ export class Virus extends Phaser.GameObjects.Rectangle {
 
         this.healthBack = scene.add.rectangle(x, y - 40, 50, 5, 0x220000).setOrigin(0.5);
         this.healthFill = scene.add.rectangle(x - 25, y - 40, 50, 5, 0x00ff66).setOrigin(0, 0.5);
+
+        if (this.virusId === VIRUS_IDS.leader) {
+            this.setFillStyle(0xff66aa);
+            this.maxHp = 220;
+            this.hp = 220;
+            this.baseSpeed = VIRUS.speed * 0.9;
+            this.speed = this.baseSpeed;
+            this.leaderFlag = scene.add.triangle(x, y - 28, 0, 0, 18, 8, 0, 16, 0xff2222).setOrigin(0.5);
+        }
+
         this.on('destroy', () => {
             this.healthBack.destroy();
             this.healthFill.destroy();
+            this.leaderFlag?.destroy();
         });
+    }
+
+    public setSpeedMultiplier(multiplier: number) {
+        this.speed = this.baseSpeed * multiplier;
     }
 
     public takeDamage(amount: number) {
@@ -79,7 +102,8 @@ export class Virus extends Phaser.GameObjects.Rectangle {
     }
 
     private die() {
-        this.scene.events.emit('virusKilled', this);
+        this.scene.events.emit(EVENT_IDS.addEnergy, 5); // very small energy syphon
+        this.scene.events.emit(EVENT_IDS.virusKilled, this);
         this.destroy(); // Remove object
     }
 
@@ -98,6 +122,9 @@ export class Virus extends Phaser.GameObjects.Rectangle {
     private syncAttachedVisuals() {
         this.healthBack.setPosition(this.x, this.y - 40);
         this.healthFill.setPosition(this.x - 25, this.y - 40);
+        if (this.leaderFlag) {
+            this.leaderFlag.setPosition(this.x, this.y - 28);
+        }
     }
 
     // Pass in the tower it's currently touching, or null if none

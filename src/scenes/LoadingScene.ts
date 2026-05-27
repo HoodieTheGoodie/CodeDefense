@@ -5,14 +5,17 @@ export class LoadingScene extends Phaser.Scene {
         super('LoadingScene');
     }
 
-    create() {
+    create(data: { levelLabel?: string, levelId?: number }) {
         const { width, height } = this.scale;
+        const levelLabel = data?.levelLabel ?? 'N1-1';
+        const parsedId = parseInt(levelLabel.replace('N1-', ''));
+        const levelId = data?.levelId ?? (isNaN(parsedId) ? 1 : parsedId);
 
         // Background
         this.add.rectangle(0, 0, width * 2, height * 2, 0x050f05);
 
         // Fun text
-        const loadText = this.add.text(width / 2, height / 2 - 50, 'INJECTING PAYLOAD...', {
+        const loadText = this.add.text(width / 2, height / 2 - 50, `LOADING LEVEL ${levelLabel}...`, {
             fontSize: '32px',
             fontFamily: 'monospace',
             color: '#00ff00'
@@ -32,13 +35,13 @@ export class LoadingScene extends Phaser.Scene {
             duration: 2000,
             ease: 'Power2',
             onUpdate: (tween) => {
-                if (tween.progress > 0.5) loadText.setText('BYPASSING FIREWALL...');
-                if (tween.progress > 0.8) loadText.setText('ACCESS GRANTED.');
+                if (tween.progress > 0.5) loadText.setText(`BOOTING ${levelLabel}...`);
+                if (tween.progress > 0.8) loadText.setText(`LEVEL ${levelLabel} READY.`);
             },
             onComplete: () => {
                 this.cameras.main.flash(500, 0, 255, 0);
                 this.time.delayedCall(500, () => {
-                    this.scene.start('GameScene');
+                    this.scene.start('GameScene', { level: levelId });
                 });
             }
         });

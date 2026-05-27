@@ -2,9 +2,10 @@ import Phaser from 'phaser';
 import { MainMenuScene } from './scenes/MainMenuScene';
 import { LoadingScene } from './scenes/LoadingScene';
 import { GameScene } from './scenes/GameScene';
+import { UnlockScene } from './scenes/UnlockScene';
 
 const config: Phaser.Types.Core.GameConfig = {
-    type: Phaser.AUTO,
+    type: Phaser.CANVAS,
     parent: 'game-container',
     width: 1024,
     height: 768,
@@ -12,7 +13,8 @@ const config: Phaser.Types.Core.GameConfig = {
     scene: [
         MainMenuScene,
         LoadingScene,
-        GameScene
+        GameScene,
+        UnlockScene
     ],
     physics: {
         default: 'arcade',

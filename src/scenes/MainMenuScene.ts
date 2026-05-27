@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { getProgress } from '../config/Progression';
 
 export class MainMenuScene extends Phaser.Scene {
     constructor() {
@@ -7,6 +8,7 @@ export class MainMenuScene extends Phaser.Scene {
 
     create() {
         const { width, height } = this.scale;
+        const progress = getProgress();
 
         // Background Wall
         this.add.rectangle(width / 2, height / 2, width, height, 0x1d1d2b);
@@ -46,6 +48,13 @@ export class MainMenuScene extends Phaser.Scene {
             color: '#00ff00'
         }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
+        this.add.text(screenX + 220, screenY + 20, `N1-${progress.node1Level}`, {
+            fontSize: '26px',
+            fontFamily: 'monospace',
+            color: '#ffff66',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+
         playBtn.on('pointerover', () => {
             playBtn.setColor('#ffffff');
             playBtn.setText('> PLAY _');
@@ -55,17 +64,11 @@ export class MainMenuScene extends Phaser.Scene {
             playBtn.setText('> PLAY');
         });
         playBtn.on('pointerdown', () => {
-            // Disable interactions to prevent multiple clicks
             playBtn.disableInteractive();
-            
-            // Zoom effect "sucking" into the screen
-            this.cameras.main.zoomTo(6, 1200, 'Power2');
-            
-            // Fade out to dark green
-            this.cameras.main.fade(1200, 0, 20, 0);
-            
-            this.cameras.main.once('camerafadeoutcomplete', () => {
-                this.scene.start('LoadingScene');
+            this.cameras.main.zoomTo(1.2, 450, 'Sine.easeInOut');
+            this.cameras.main.fadeOut(450, 0, 12, 0);
+            this.time.delayedCall(460, () => {
+                this.scene.start('LoadingScene', { levelLabel: `N1-${progress.node1Level}` });
             });
         });
 
